@@ -1,0 +1,7 @@
+cluster.name: "marketplace-cluster"
+node.name: "marketplace-node"
+network.host: 0.0.0.0
+http.port: 9200
+path.data: /usr/share/elasticsearch/data
+path.logs: /usr/share/elasticsearch/logs
+discovery.type: single-node

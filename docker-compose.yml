@@ -1,0 +1,441 @@
+services:
+
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ./infrastructure/databases/postgres/config:/docker-entrypoint-inidb.d:ro
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres -p 5432
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - services
+    
+  keycloak-postgres:
+    image: postgres:17
+    container_name: keycloak-postgres
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    volumes:
+      - ./infrastructure/databases/keycloak-postgres/data:/var/lib/postgresql/data
+    ports:
+      - 5433:5432
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U keycloak -p 5432
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - services
+
+  redis:
+    image: redis:7
+    container_name: redis
+    ports:
+      - 6379:6379
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test:
+        - CMD
+        - redis-cli
+        - -h
+        - localhost
+        - -a
+        - ping
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - services
+
+  mongodb:
+    image: mongo:6
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: mongodb
+      MONGO_INITDB_ROOT_PASSWORD: mongodb
+      MONGO_INITDB_DATABASE: mongodb
+    ports:
+      - 27017:27017
+    volumes:
+      - ./infrastructure/databases/mongodb/config:/docker-entrypoint-initdb.d:ro
+      - mongodb_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --eval
+        - db.runCommand('ping').ok == 1
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - services
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ACCESS_KEY: minioaccesskey
+      MINIO_SECRET_KEY: miniosecretkey
+    volumes:
+      - minio_data:/data
+      - ./infrastructure/databases/minio/config:/scripts
+    ports:
+      - 9000:9000
+      - 9001:9001
+    entrypoint: /bin/sh -c "minio server /data & /scripts/init-policy.sh && tail -f
+      /dev/null"
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -f
+        - http://localhost:9000/minio/health/ready
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - services
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+      - xpack.security.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - ELASTIC_PASSWORD=elasticsearch
+    volumes:
+      - ./infrastructure/databases/elasticsearch/config/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml:ro
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+      - 9300:9300
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -s http://localhost:9200/_cluster/health | grep -q '"status"'
+      interval: 10s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+    networks:
+      - services
+
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:latest
+    container_name: postgres-exporter
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: postgresql://postgres:postgres@postgres:5432/postgres?sslmode=disable
+    ports:
+      - 9187:9187
+    networks:
+      - services
+      
+  redis-exporter:
+    image: oliver006/redis_exporter:latest
+    container_name: redis-exporter
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    ports:
+      - 9121:9121
+    networks:
+      - services
+
+  mongodb-exporter:
+    image: bitnami/mongodb-exporter:latest
+    container_name: mongodb-exporter
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      MONGODB_URI: mongodb://mongodb:mongodb@mongodb:27017/product-reviews-bd
+    ports:
+      - 9216:9216
+    networks:
+      - services
+
+  minio-exporter:
+    image: joepll/minio-exporter:latest
+    container_name: minio-exporter
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_SERVER_URL: http://minio:9000
+      MINIO_ACCESS_KEY: minioaccesskey
+      MINIO_SECRET_KEY: miniosecretkey
+    ports:
+      - 9100:9100
+    networks:
+      - services
+
+  elasticsearch-exporter:
+    image: prometheuscommunity/elasticsearch-exporter:latest
+    container_name: elasticsearch-exporter
+    command:
+      - --es.uri=http://elasticsearch:9200
+      - --es.all
+    ports:
+      - 9114:9114
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - services
+      
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: node-exporter
+    ports:
+      - 9105:9100
+    environment:
+      - TARGET="host.docker.internal"
+    volumes:
+      - /:/host
+    restart: unless-stopped
+    networks:
+      - services
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+    ports:
+      - 9090:9090
+    volumes:
+      - ./infrastructure/prometheus/config/prometheus.yml:/etc/prometheus/prometheus.yml
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - http://localhost:9090/-/healthy
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - services
+
+  loki:
+    image: grafana/loki:2.9.2
+    container_name: loki
+    ports:
+      - 3100:3100
+    volumes:
+      - ./infrastructure/loki/config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - -q
+        - http://localhost:3100/ready
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - services
+
+  alloy:
+    image: grafana/alloy:latest
+    container_name: alloy
+    user: root
+    ports:
+      - 9080:9080
+      - 4317:4317
+      - 4318:4318
+    volumes:
+      - ./infrastructure/alloy/config/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/log:/var/log:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+    environment:
+      GRAFANA_LOKI_URL: http://loki:3100/loki/api/v1/push
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:9080
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    networks:
+      - services
+
+  grafana:
+    image: grafana/grafana:10.3.1
+    container_name: grafana
+    ports:
+      - 3000:3000
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_healthy
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: true
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_METRICS_ENABLED: "true"
+    volumes:
+      - grafana_dashboards:/var/lib/grafana/dashboards
+      - ./infrastructure/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - --spider
+        - http://localhost:3000/api/health
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - services
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.2
+    container_name: keycloak
+    command: start-dev --import-realm --metrics-enabled=true --http-management-port=9002
+    ports:
+      - 8080:8080
+      - 9002:9002
+    environment:
+      JAVA_OPTS: >
+        -Dkeycloak.migration.usersExportStrategy=REALM_FILE
+        -Dlog.level=DEBUG
+        -Dkeycloak.events.level=DEBUG
+        -Dkeycloak.events.enabled=true
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://keycloak-postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      KC_DB_PASSWORD: keycloak
+      KC_METRICS_ENABLED: true
+      KC_HEALTH_ENABLED: true
+    volumes:
+      - ./infrastructure/keycloak/config/realm-config.json:/opt/keycloak/data/import/realm-config.json
+    depends_on:
+      keycloak-postgres:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - curl -fsS http://localhost:9002/health/ready || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks:
+      - services
+
+  my-spring-boot-app:
+    build:
+      context: ./application
+      dockerfile: Dockerfile
+    image: my-spring-boot-app:latest
+    container_name: my-spring-boot-app
+    ports:
+      - 8888:8888
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - services
+
+volumes:
+  postgres_data:
+  redis_data:
+  mongodb_data:
+  minio_data:
+  elasticsearch_data:
+  grafana_dashboards:
+  grafana_data:
+  keycloak_data:
+  remote-ubuntu-bin:
+
+networks:
+  services:
+    driver: bridge
+
+# docker save -o redis.tar redis:7
+# docker save -o elasticsearch.tar docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+# docker save -o mongodb.tar mongo:6
+# docker save -o postgres.tar postgres:17
+# docker save -o minio.tar minio/minio:latest
+# docker save -o mongodb-exporter.tar bitnami/mongodb-exporter:latest
+# docker save -o grafana.tar grafana/grafana:10.3.1
+# docker save -o postgres-exporter.tar prometheuscommunity/postgres-exporter:latest
+# docker save -o redis-exporter.tar oliver006/redis_exporter:latest
+# docker save -o elasticsearch-exporter.tar prometheuscommunity/elasticsearch-exporter:latest
+# docker save -o keycloak-postgres-exporter.tar prometheuscommunity/postgres-exporter:latest
+# docker save -o alloy.tar grafana/alloy:latest
+# docker save -o minio-exporter.tar joepll/minio-exporter:latest
+# docker save -o prometheus.tar prom/prometheus:latest
+# docker save -o node-exporter.tar quay.io/prometheus/node-exporter:latest
+
+
+# scp *.tar root@178.72.136.11:/home/root/docker_images_transfer/
+
+# scp "E:\Projects\projectsIT\Hackathon\Monolith Architecture\monolith-project\infrastructure" root@178.72.136.11:/home/root/monolith-project/infrastructure/
+
+
+# docker load -i redis.tar
+# docker load -i elasticsearch.tar
+# docker load -i mongodb.tar
+# docker load -i postgres.tar
+# docker load -i minio.tar
+# docker load -i mongodb-exporter.tar
+# docker load -i grafana.tar
+# docker load -i postgres-exporter.tar
+# docker load -i redis-exporter.tar
+# docker load -i elasticsearch-exporter.tar
+# docker load -i keycloak-postgres-exporter.tar
+# docker load -i alloy.tar
+# docker load -i minio-exporter.tar
+# docker load -i prometheus.tar
+# docker load -i node-exporter.tar
+
