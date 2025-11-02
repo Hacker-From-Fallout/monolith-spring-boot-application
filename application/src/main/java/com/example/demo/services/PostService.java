@@ -10,7 +10,6 @@ import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +26,7 @@ import com.example.demo.repositories.PostElasticsearchRepository;
 import com.example.demo.repositories.PostMongodbRepository;
 import com.example.demo.repositories.PostPostgresRepository;
 import com.example.demo.repositories.PostRedisRepository;
+import com.example.demo.security.IUserProfile;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -145,9 +145,8 @@ public class PostService {
 
     @Transactional
     public void savePostToPostgres(String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         String imageUrl = uploadImageToMinio(imageFile);
 
         PostPostgres postPostgres = PostPostgres.builder()
@@ -161,9 +160,8 @@ public class PostService {
 
     @Transactional
     public void savePostToMongodb(String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         String imageUrl = uploadImageToMinio(imageFile);
 
         PostMongodb postMongodb = PostMongodb.builder()
@@ -177,9 +175,8 @@ public class PostService {
 
     @Transactional
     public void savePostToRedis(String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         String imageUrl = uploadImageToMinio(imageFile);
 
         PostRedis postRedis = PostRedis.builder()
@@ -194,9 +191,8 @@ public class PostService {
 
     @Transactional
     public void savePostToElasticsearch(String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         String imageUrl = uploadImageToMinio(imageFile);
 
         PostElasticsearch postElasticsearch = PostElasticsearch.builder()
@@ -213,9 +209,8 @@ public class PostService {
 
     @Transactional
     public void updatePostInPostgres(String postId, String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostPostgres postPostgres = postPostgresRepository.findById(postId).orElse(null);
 
         if (postPostgres == null) {
@@ -237,9 +232,8 @@ public class PostService {
 
     @Transactional
     public void updatePostInMongodb(String postId, String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostMongodb postMongodb = postMongodbRepository.findById(postId).orElse(null);
 
         if (postMongodb == null) {
@@ -261,9 +255,8 @@ public class PostService {
 
     @Transactional
     public void updatePostInRedis(String postId, String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostRedis postRedis = postRedisRepository.findById(postId).orElse(null);
 
         if (postRedis == null) {
@@ -285,9 +278,8 @@ public class PostService {
 
     @Transactional
     public void updatePostInElasticsearch(String postId, String text, MultipartFile imageFile) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostElasticsearch postElasticsearch = postElasticsearchRepository.findById(postId).orElse(null);
 
         if (postElasticsearch == null) {
@@ -312,9 +304,8 @@ public class PostService {
 
     @Transactional
     public void deletePostFromPostgresById(String postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostPostgres postPostgres = postPostgresRepository.findById(postId).orElse(null);
         
         if (postPostgres == null) {
@@ -332,9 +323,8 @@ public class PostService {
 
     @Transactional
     public void deletePostFromMongodbById(String postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostMongodb postMongodb = postMongodbRepository.findById(postId).orElse(null);
         
         if (postMongodb == null) {
@@ -352,9 +342,8 @@ public class PostService {
 
     @Transactional
     public void deletePostFromRedisById(String postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostRedis postRedis = postRedisRepository.findById(postId).orElse(null);
         
         if (postRedis == null) {
@@ -372,9 +361,8 @@ public class PostService {
 
     @Transactional
     public void deletePostFromElasticsearchById(String postId) {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        String userId = authentication.getName();
+        IUserProfile principal = (IUserProfile) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        String userId = principal.getUserId();
         PostElasticsearch postElasticsearch = postElasticsearchRepository.findById(postId).orElse(null);
         
         if (postElasticsearch == null) {
